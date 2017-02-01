@@ -1,0 +1,41 @@
+K 25
+svn:wc:ra_dav:version-url
+V 83
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common
+END
+wandalogger.py
+K 25
+svn:wc:ra_dav:version-url
+V 98
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/wandalogger.py
+END
+__init__.py
+K 25
+svn:wc:ra_dav:version-url
+V 95
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/__init__.py
+END
+log.py
+K 25
+svn:wc:ra_dav:version-url
+V 90
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/log.py
+END
+db.py
+K 25
+svn:wc:ra_dav:version-url
+V 89
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/db.py
+END
+mysql.py
+K 25
+svn:wc:ra_dav:version-url
+V 92
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/mysql.py
+END
+shell.py
+K 25
+svn:wc:ra_dav:version-url
+V 92
+/svn/dssvn/!svn/ver/55966/branch/20140604/intelligentservice/data_notice/lib/common/shell.py
+END

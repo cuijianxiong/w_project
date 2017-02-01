@@ -1,0 +1,184 @@
+# -*- encoding: utf-8 -*-
+
+import MySQLdb
+
+class MysqlClient(object):
+
+    def __init__(self, g_mysql_masters, g_mysql_slaves, log):
+        self.log = log
+        self.master_config = {}
+        self.slave_config = {}
+        self.master_conn = {}
+        self.slave_conn = {}
+        for master in g_mysql_masters:
+            self.master_config[master["db_name"]] = master
+            self.master_conn[master["db_name"]] = None
+        for slave in g_mysql_slaves:
+            self.slave_config[slave["db_name"]] = slave
+            self.slave_conn[slave["db_name"]] = None
+
+    def __del__(self):
+        for master in self.master_conn:
+            try:
+                if self.master_conn[master]:
+                    self.master_conn[master].close()
+                    self.log.debug("Close master db connection success.")
+            except Exception, e:
+                self.log.error(e)
+        for slave in self.slave_conn:
+            try:
+                if self.slave_conn[slave]:
+                    self.slave_conn[slave].close()
+                    self.log.debug("Close slave db connection success.")
+            except Exception, e:
+                self.log.error(e)
+
+    def __get_connection(self, config, db_name):
+        conn = None
+        try:
+            conn = MySQLdb.connect(host=config["host"],
+                                   user=config["user"],
+                                   passwd=config["passwd"],
+                                   port=config["port"],
+                                   db=db_name,
+                                   charset='utf8')
+            self.log.debug("Get db connection is success.")
+        except Exception, e:
+            self.log.error("Get db connection is error!!!!!!")
+            self.log.error("The config is " + str(config))
+            self.log.error(e)
+        return conn
+
+    def __get_master_connection(self, db_name):
+        conn = None
+        if self.master_conn[db_name]:
+            return self.master_conn[db_name]
+        if db_name not in self.master_config:
+            self.log.warning("Invalid master db name: %s", db_name);
+            return conn
+        self.log.debug("Get master db connection.")
+        conn = self.__get_connection(self.master_config[db_name], db_name)
+        if conn:
+            self.master_conn[db_name] = conn
+        return conn
+
+    def __get_slave_connection(self, db_name):
+        conn = None
+        if self.slave_conn[db_name]:
+            return self.slave_conn[db_name]
+        if db_name not in self.slave_config:
+            self.log.warning("Invalid slave db name: %s", db_name);
+            return conn
+        self.log.debug("Get slave db connection.")
+        conn = self.__get_connection(self.slave_config[db_name], db_name)
+        if conn:
+            self.slave_conn[db_name] = conn
+        return conn
+
+    def __close_cursor(self, cursor):
+        try:
+            if cursor: cursor.close()
+        except Exception, e:
+            self.log.error(e)
+
+    def __rollback(self, conn):
+        try:
+            if conn: conn.rollback()
+        except Exception, e:
+            self.log.error(e)
+
+    def __close_connection(self, cursor, conn):
+        try:
+            if cursor: cursor.close()
+            if conn:
+                conn.close()
+        except Exception, e:
+            self.log.error(e)
+        finally:
+            conn = None
+
+    def execute_query(self, db_name, sql, params=None):
+        cursor = None
+        conn = None
+        try:
+            conn = self.__get_slave_connection(db_name)
+            if conn is None: return None
+            cursor = conn.cursor()
+            if params is None:
+                self.log.debug("Execute query sql: " + sql)
+                cursor.execute(sql)
+            else:
+                self.log.debug("Execute query sql: " + sql % params)
+                cursor.execute(sql, params)
+            self.log.debug("Query record number: %d", cursor.rowcount)
+            if not cursor.rowcount: return None
+            return cursor.fetchall()
+        except Exception, e:
+            self.log.error(e)
+            self.__close_connection(cursor, conn)
+            self.slave_conn[db_name] = None
+            raise e
+        finally:
+            self.__close_cursor(cursor)
+        return None
+
+    def execute_update(self, db_name, sql, params=None):
+        rowcount = 0
+        cursor = None
+        conn = None
+        try:
+            conn = self.__get_master_connection(db_name)
+            if conn is None: return None
+            cursor = conn.cursor()
+            if params is None:
+                self.log.debug("Execute update sql: " + sql)
+                cursor.execute(sql)
+            else:
+                self.log.debug("Execute update sql: " + sql % params)
+                cursor.execute(sql, params)
+            conn.commit()
+            rowcount = cursor.rowcount
+            self.log.debug("Update record number: %d", rowcount)
+        except Exception, e:
+            self.log.error(e)
+            self.__rollback(conn)
+            self.__close_connection(cursor, conn)
+            self.master_conn[db_name] = None
+            raise e
+        finally:
+            self.__close_cursor(cursor)
+        return rowcount
+
+    def execute_batch(self, db_name, sql, params_list):
+        total_rowcount = 0
+        if not params_list: return total_rowcount
+        cursor = None
+        conn = None
+        try:
+            conn = self.__get_master_connection(db_name)
+            if conn is None: return None
+            cursor = conn.cursor()
+            counter = 0
+            new_params_list = []
+            total_counter = len(params_list)
+            for item in params_list:
+                counter += 1
+                new_params_list.append(item)
+                if (counter % 200 == 0 or counter == total_counter):
+                    self.log.debug("Execute batch sql: " + sql)
+                    self.log.debug("Execute batch params: " + str(new_params_list))
+                    rowcount = cursor.executemany(sql, new_params_list)
+                    conn.commit()
+                    self.log.debug("Batch update record number: %d", rowcount)
+                    total_rowcount += rowcount
+                    new_params_list = []
+            self.log.debug("Total update record number: %d", total_rowcount)
+        except Exception, e:
+            self.log.error(e)
+            self.__rollback(conn)
+            self.__close_connection(cursor, conn)
+            self.master_conn[db_name] = None
+            raise e
+        finally:
+            self.__close_cursor(cursor)
+        return total_rowcount
